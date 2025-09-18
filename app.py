@@ -9,7 +9,7 @@ from PIL import Image
 # ----------------------------
 # Model Path
 # ----------------------------
-MODEL_PATH = "railway_model_final(1).tflite"
+MODEL_PATH = "railway_model_final (1).tflite"
 
 # ----------------------------
 # Load TFLite Model
