@@ -12,7 +12,7 @@ import os
 # ----------------------------
 @st.cache_resource
 def load_tflite_model():
-    tflite_path = "model_quantized.tflite"
+    tflite_path = "railway_model_final.tflite"
     if not os.path.exists(tflite_path):
         st.error(f"❌ TFLite model not found at {tflite_path}")
         return None
