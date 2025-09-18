@@ -1,8 +1,6 @@
-streamlit
-tensorflow
-pillow
-numpy
-pandas
-matplotlib
-folium
-streamlit-folium
+streamlit==1.30.0
+tensorflow==2.14.0
+numpy==1.25.2
+pandas==2.1.1
+matplotlib==3.8.1
+Pillow==10.0.1
