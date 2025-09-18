@@ -54,7 +54,9 @@ with tab1:
         # Sigmoid output
         prob = float(output[0])
         threshold = 0.5  # 50% threshold
-        if prob < threshold:
+
+        # Corrected logic: defective if prob > threshold
+        if prob > threshold:
             st.error(f"🚨 Defective Track Detected\nConfidence: {prob:.2%}")
         else:
             st.success(f"✅ Track is Properly Aligned\nConfidence: {prob:.2%}")
