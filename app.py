@@ -1,81 +1,63 @@
-import os
-import random
+import streamlit as st
 import numpy as np
 import tensorflow as tf
-import streamlit as st
 from PIL import Image
 
-st.set_page_config(page_title="Railway Track Fault Detector", layout="wide")
+# Path to your TFLite model
+MODEL_PATH = "railway_model_final.tflite"
 
-# -------- Load TFLite model --------
+# Cache the model so it loads only once
 @st.cache_resource
 def load_model():
-    model_path = "railway_model_final.tflite"
-    if not os.path.isfile(model_path):
-        st.error("❌ Model file 'railway_model_final.tflite' not found. Please upload it to this folder.")
-        st.stop()
-    interpreter = tf.lite.Interpreter(model_path=model_path)
+    interpreter = tf.lite.Interpreter(model_path=MODEL_PATH)
     interpreter.allocate_tensors()
     return interpreter
 
-interpreter = load_model()
+# Preprocess image for model
+def preprocess_image(image, input_shape):
+    image = image.resize((input_shape[1], input_shape[2]))  # resize to expected input
+    img_array = np.array(image).astype(np.float32) / 255.0  # normalize
+    img_array = np.expand_dims(img_array, axis=0)  # add batch dimension
+    return img_array
 
-# -------- Prediction function --------
-def predict(image: Image.Image):
-    img = image.resize((224, 224))
-    img_array = np.expand_dims(np.array(img) / 255.0, axis=0).astype(np.float32)
-
+# Run inference
+def predict(interpreter, input_data):
     input_details = interpreter.get_input_details()
     output_details = interpreter.get_output_details()
 
-    interpreter.set_tensor(input_details[0]['index'], img_array)
+    interpreter.set_tensor(input_details[0]['index'], input_data)
     interpreter.invoke()
-    prediction = interpreter.get_tensor(output_details[0]['index'])[0]
 
-    return prediction
+    output_data = interpreter.get_tensor(output_details[0]['index'])
+    return output_data
 
-# -------- Simulated GPS + sensor data --------
-def get_gps_data():
-    return {
-        "Latitude": round(random.uniform(8.0, 12.0), 6),
-        "Longitude": round(random.uniform(76.0, 80.0), 6)
-    }
+# -------- Streamlit UI --------
+st.title("🚉 Railway Track Detection")
 
-def get_sensor_data():
-    return {
-        "Ultrasonic": round(random.uniform(0.0, 1.0), 2),
-        "Acoustic": round(random.uniform(0.0, 1.0), 2),
-        "Radar": round(random.uniform(0.0, 1.0), 2),
-        "Vibration": round(random.uniform(0.0, 1.0), 2)
-    }
+interpreter = load_model()
 
-# -------- UI --------
-st.title("🚂 Railway Track Fault Detector")
-st.write("Analyze railway track images with sensor + GPS data")
+uploaded_file = st.file_uploader("Upload an image", type=["jpg", "jpeg", "png"])
 
-uploaded_file = st.file_uploader("📁 Upload a railway track image", type=["jpg", "jpeg", "png"])
-
-if uploaded_file:
+if uploaded_file is not None:
+    # Display uploaded image
     image = Image.open(uploaded_file).convert("RGB")
-    st.image(image, caption="Uploaded Track Image", width="stretch")
+    st.image(image, caption="Uploaded Image", use_container_width=True)
 
-    if st.button("🔍 Analyze Track"):
-        with st.spinner("Analyzing... Please wait"):
-            prediction = predict(image)
-            gps = get_gps_data()
-            sensors = get_sensor_data()
+    # Preprocess and predict
+    input_details = interpreter.get_input_details()
+    input_shape = input_details[0]['shape']
 
-            st.subheader("📍 GPS Location")
-            st.json(gps)
+    input_data = preprocess_image(image, input_shape)
+    output = predict(interpreter, input_data)
 
-            st.subheader("📡 Sensor Readings")
-            st.json(sensors)
+    # Display prediction result
+    st.subheader("Prediction Result")
+    st.write("Raw model output:", output)
 
-            st.subheader("📊 Prediction Result")
-            defective_prob = float(prediction[0])
-            non_defective_prob = float(prediction[1]) if len(prediction) > 1 else (1 - defective_prob)
+    # Optional: interpret output as class labels
+    classes = ["defective", "non-defective"]
+    predicted_class = classes[int(np.argmax(output))]
+    confidence = np.max(output)
 
-            if defective_prob > non_defective_prob:
-                st.error(f"⚠️ Track is **Defective** \n\n Confidence: {defective_prob:.2%}")
-            else:
-                st.success(f"✅ Track is **Not Defective** \n\n Confidence: {non_defective_prob:.2%}")
+    st.write(f"**Predicted Class:** {predicted_class}")
+    st.write(f"**Confidence:** {confidence:.2f}")
