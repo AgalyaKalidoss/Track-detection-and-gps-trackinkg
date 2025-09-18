@@ -1,7 +1,10 @@
 import streamlit as st
 import numpy as np
+import pandas as pd
 import tensorflow as tf
 from PIL import Image
+
+# Optional: comment out folium if not installed
 import folium
 from streamlit_folium import st_folium
 
@@ -81,9 +84,11 @@ with tab2:
         # random lat/lon in Tamil Nadu range
         lat = np.random.uniform(8.0, 13.0)
         lon = np.random.uniform(76.0, 80.0)
-        data.append([t, loc, km_marker, speed, lat, lon])
+        data.append([t, loc, km_marker, speed, lat, lon])  # 6 elements
 
+    # Columns must match exactly
     df = pd.DataFrame(data, columns=["Train","Location","KM_Marker","Speed","Latitude","Longitude"])
+
     st.subheader("🚉 Current Train Status")
     st.dataframe(df)
 
@@ -104,7 +109,7 @@ with tab2:
     else:
         st.success("✅ No collision risks detected")
 
-    # Scheduling
+    # Scheduling Suggestions
     st.subheader("📋 Scheduling Suggestions")
     for idx, row in df.iterrows():
         if row["Speed"] < 60:
@@ -112,7 +117,7 @@ with tab2:
         else:
             st.info(f"✅ {row['Train']} is on time. Schedule next train 5 min later.")
 
-    # Map
+    # Map Display
     st.subheader("🗺️ Train Positions on Map")
     m = folium.Map(location=[11.0, 78.0], zoom_start=6)
     for idx,row in df.iterrows():
@@ -120,6 +125,6 @@ with tab2:
             location=[row["Latitude"], row["Longitude"]],
             popup=f"{row['Train']} ({row['Speed']} km/h)",
             tooltip=row["Train"],
-            icon=folium.Icon(color='blue' if row["Speed"]>60 else 'red')
+            icon=folium.Icon(color='blue' if row["Speed"]>=60 else 'red')
         ).add_to(m)
     st_folium(m, width=700, height=500)
