@@ -1,8 +1,8 @@
 import streamlit as st
 import numpy as np
 import pandas as pd
-import tensorflow as tf
 from PIL import Image
+import tensorflow as tf
 
 import folium
 from streamlit_folium import st_folium
@@ -43,21 +43,21 @@ with tab1:
         img = image.resize((224,224))
         img_array = np.expand_dims(np.array(img)/255.0, axis=0).astype(np.float32)
 
-        # Run inference
+        # Inference
         interpreter.set_tensor(input_details[0]['index'], img_array)
         interpreter.invoke()
         output = interpreter.get_tensor(output_details[0]['index'])[0]
 
-        # Determine model output type
-        if len(output) == 2:  # softmax output
+        # Handle output
+        if len(output) == 2:  # softmax
             pred_class = np.argmax(output)
             if pred_class == 0:
                 st.error(f"🚨 Defective Track Detected\nConfidence: {output[0]:.2%}")
             else:
                 st.success(f"✅ Track is Properly Aligned\nConfidence: {output[1]:.2%}")
-        else:  # sigmoid output
+        else:  # sigmoid
             prob = float(output[0])
-            threshold = 0.462  # adjust based on model
+            threshold = 0.462  # adjust empirically
             if prob < threshold:
                 st.error(f"🚨 Defective Track Detected\nConfidence: {prob:.2%}")
             else:
@@ -78,14 +78,13 @@ with tab2:
 
     data = []
     for t, loc in zip(train_names, locations):
-        km_marker = np.random.randint(0,500)   # simulated position in km
-        speed = np.random.randint(40,120)      # simulated speed km/h
-        lat = np.random.uniform(8.0, 13.0)     # simulated latitude
-        lon = np.random.uniform(76.0, 80.0)    # simulated longitude
+        km_marker = np.random.randint(0,500)
+        speed = np.random.randint(40,120)
+        lat = np.random.uniform(8.0,13.0)
+        lon = np.random.uniform(76.0,80.0)
         data.append([t, loc, km_marker, speed, lat, lon])
 
     df = pd.DataFrame(data, columns=["Train","Location","KM_Marker","Speed","Latitude","Longitude"])
-
     st.subheader("🚉 Current Train Status")
     st.dataframe(df)
 
@@ -106,7 +105,7 @@ with tab2:
     else:
         st.success("✅ No collision risks detected")
 
-    # Scheduling Suggestions
+    # Scheduling
     st.subheader("📋 Scheduling Suggestions")
     for idx, row in df.iterrows():
         if row["Speed"] < 60:
@@ -116,7 +115,7 @@ with tab2:
 
     # Map Display
     st.subheader("🗺️ Train Positions on Map")
-    m = folium.Map(location=[11.0, 78.0], zoom_start=6)
+    m = folium.Map(location=[11.0,78.0], zoom_start=6)
     for idx,row in df.iterrows():
         folium.Marker(
             location=[row["Latitude"], row["Longitude"]],
