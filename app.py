@@ -1,12 +1,13 @@
 import streamlit as st
-import numpy as np
-from PIL import Image
 import tensorflow as tf
-import geocoder  # For getting current GPS location
+from PIL import Image
+import numpy as np
+import geocoder
+import io
 
-# =======================
+# ------------------------
 # Load TFLite Model
-# =======================
+# ------------------------
 @st.cache_resource
 def load_model():
     interpreter = tf.lite.Interpreter(model_path="railway_model_final.tflite")
@@ -14,88 +15,73 @@ def load_model():
     return interpreter
 
 interpreter = load_model()
+
+# Get input/output details
 input_details = interpreter.get_input_details()
 output_details = interpreter.get_output_details()
 
-# =======================
-# App UI Setup
-# =======================
-st.set_page_config(page_title="Railway Track Fault Detector", layout="wide")
+# ------------------------
+# Helper Functions
+# ------------------------
+def preprocess_image(image):
+    img = image.resize((224, 224))
+    img = np.array(img, dtype=np.float32) / 255.0
+    img = np.expand_dims(img, axis=0)
+    return img
 
-st.title("🚂 Railway Track Fault Detection Dashboard")
-st.markdown("### Detect defects in real-time using sensor data + GPS + AI")
+def predict(img):
+    interpreter.set_tensor(input_details[0]['index'], img)
+    interpreter.invoke()
+    output_data = interpreter.get_tensor(output_details[0]['index'])
+    return output_data
 
-# =======================
-# GPS Section
-# =======================
-with st.sidebar:
-    st.header("📍 GPS Location")
-    if st.button("📡 Get Current Location"):
+def get_gps_location():
+    try:
         g = geocoder.ip('me')
         if g.ok:
-            st.session_state['lat'] = g.latlng[0]
-            st.session_state['lon'] = g.latlng[1]
+            return g.latlng
         else:
-            st.warning("Could not fetch GPS automatically. Please enter manually.")
-    lat = st.text_input("Latitude", value=str(st.session_state.get('lat', "")))
-    lon = st.text_input("Longitude", value=str(st.session_state.get('lon', "")))
+            return None
+    except:
+        return None
 
-    # =======================
-    # Sensor Inputs
-    # =======================
-    st.header("📡 Sensor Data")
-    ultrasonic = st.slider("Ultrasonic Distance (cm)", 0, 200, 50)
-    vibration = st.slider("Vibration Level (Hz)", 0, 100, 30)
-    acoustic = st.slider("Acoustic Level (dB)", 0, 120, 60)
-    radar = st.slider("Radar Reflection (%)", 0, 100, 50)
+# ------------------------
+# Streamlit UI
+# ------------------------
+st.set_page_config(page_title="Railway Track Fault Detector", page_icon="🚆", layout="wide")
 
-# =======================
-# Image Upload
-# =======================
-st.subheader("📷 Upload Track Image")
-uploaded_file = st.file_uploader("Choose an image...", type=["jpg", "jpeg", "png"])
+st.title("🚆 Railway Track Fault Detection with GPS")
+st.write("Upload a railway track image to check if it is **Defective** or **Non-Defective** along with GPS location.")
 
-def preprocess_image(img: Image.Image):
-    img = img.resize((224, 224))
-    arr = np.array(img).astype(np.float32) / 255.0
-    arr = np.expand_dims(arr, axis=0)
-    return arr
+# Upload Section
+uploaded_file = st.file_uploader("📷 Upload a Railway Track Image", type=["jpg", "jpeg", "png"])
 
-def predict(img_array):
-    interpreter.set_tensor(input_details[0]['index'], img_array)
-    interpreter.invoke()
-    output = interpreter.get_tensor(output_details[0]['index'])
-    return output
-
-# =======================
-# Prediction
-# =======================
 if uploaded_file is not None:
-    image = Image.open(uploaded_file).convert("RGB")
-    st.image(image, caption="Uploaded Track Image", width=400)
+    image = Image.open(uploaded_file).convert('RGB')
+    st.image(image, caption="Uploaded Image", use_container_width=True)
 
-    if st.button("🔍 Analyze Track"):
-        img_array = preprocess_image(image)
-        prediction = predict(img_array)
-        predicted_class = np.argmax(prediction, axis=1)[0]
+    # Predict Button
+    if st.button("🔍 Detect Fault"):
+        # Preprocess and Predict
+        input_img = preprocess_image(image)
+        result = predict(input_img)
+        confidence = float(np.max(result))
+        predicted_class = np.argmax(result)
 
-        # Combine sensor data and ML prediction
-        risk_score = (
-            (200 - ultrasonic) * 0.2 +
-            vibration * 0.2 +
-            acoustic * 0.2 +
-            radar * 0.2 +
-            (50 if predicted_class == 1 else 0)
-        )
+        label = "Defective" if predicted_class == 1 else "Non-Defective"
+        color = "red" if predicted_class == 1 else "green"
 
-        result = "🚨 DEFECTIVE" if risk_score > 50 else "✅ NON-DEFECTIVE"
+        st.markdown(f"### ✅ Prediction: <span style='color:{color}'>{label}</span>", unsafe_allow_html=True)
+        st.progress(confidence)
 
-        # =======================
-        # Result Display
-        # =======================
-        st.markdown("---")
-        st.subheader("📊 Analysis Result")
-        st.metric(label="Prediction", value=result)
-        st.write(f"**GPS Location:** {lat}, {lon}")
-        st.progress(min(risk_score / 100, 1.0))
-        st.write(f"**Confidence Score:** {risk_score:.2f} / 100")
+        # Get GPS
+        gps = get_gps_location()
+        if gps:
+            st.success(f"📍 GPS Location: Latitude {gps[0]}, Longitude {gps[1]}")
+        else:
+            st.warning("⚠️ GPS not found automatically. Please enter manually below:")
+
+        lat = st.text_input("Manual Latitude (if GPS failed)")
+        lon = st.text_input("Manual Longitude (if GPS failed)")
+        if lat and lon:
+            st.info(f"📍 Manual Location: Latitude {lat}, Longitude {lon}")
