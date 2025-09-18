@@ -10,10 +10,11 @@ st.set_page_config(page_title="Railway Track Fault Detector", layout="wide")
 # -------- Load TFLite model --------
 @st.cache_resource
 def load_model():
-    if not os.path.exists("railway_model_final.tflite"):
-        st.error("❌ Model file 'railway_model_final.tflite' not found. Please upload it.")
+    model_path = "railway_model_final.tflite"
+    if not os.path.isfile(model_path):
+        st.error("❌ Model file 'railway_model_final.tflite' not found. Please upload it to this folder.")
         st.stop()
-    interpreter = tf.lite.Interpreter(model_path="railway_model_final.tflite")
+    interpreter = tf.lite.Interpreter(model_path=model_path)
     interpreter.allocate_tensors()
     return interpreter
 
@@ -31,10 +32,9 @@ def predict(image: Image.Image):
     interpreter.invoke()
     prediction = interpreter.get_tensor(output_details[0]['index'])[0]
 
-    # Assuming output: [prob_defective, prob_non_defective]
     return prediction
 
-# -------- Simulate GPS & Sensor --------
+# -------- Simulated GPS + sensor data --------
 def get_gps_data():
     return {
         "Latitude": round(random.uniform(8.0, 12.0), 6),
@@ -43,36 +43,39 @@ def get_gps_data():
 
 def get_sensor_data():
     return {
-        "Vibration": round(random.uniform(0.0, 1.0), 2),
-        "Tilt": round(random.uniform(0.0, 5.0), 2)
+        "Ultrasonic": round(random.uniform(0.0, 1.0), 2),
+        "Acoustic": round(random.uniform(0.0, 1.0), 2),
+        "Radar": round(random.uniform(0.0, 1.0), 2),
+        "Vibration": round(random.uniform(0.0, 1.0), 2)
     }
 
 # -------- UI --------
-st.title("🚂 Railway Track Fault Detector with GPS + Sensors")
+st.title("🚂 Railway Track Fault Detector")
+st.write("Analyze railway track images with sensor + GPS data")
 
-uploaded_file = st.file_uploader("Upload a railway track image", type=["jpg", "jpeg", "png"])
+uploaded_file = st.file_uploader("📁 Upload a railway track image", type=["jpg", "jpeg", "png"])
 
 if uploaded_file:
     image = Image.open(uploaded_file).convert("RGB")
     st.image(image, caption="Uploaded Track Image", width="stretch")
 
-    if st.button("🔍 Analyze"):
-        with st.spinner("Analyzing track..."):
+    if st.button("🔍 Analyze Track"):
+        with st.spinner("Analyzing... Please wait"):
             prediction = predict(image)
             gps = get_gps_data()
-            sensor = get_sensor_data()
+            sensors = get_sensor_data()
 
             st.subheader("📍 GPS Location")
             st.json(gps)
 
-            st.subheader("📡 Sensor Data")
-            st.json(sensor)
+            st.subheader("📡 Sensor Readings")
+            st.json(sensors)
 
             st.subheader("📊 Prediction Result")
             defective_prob = float(prediction[0])
             non_defective_prob = float(prediction[1]) if len(prediction) > 1 else (1 - defective_prob)
 
             if defective_prob > non_defective_prob:
-                st.error(f"⚠️ Track is **Defective**\n\nConfidence: {defective_prob:.2%}")
+                st.error(f"⚠️ Track is **Defective** \n\n Confidence: {defective_prob:.2%}")
             else:
-                st.success(f"✅ Track is **Not Defective**\n\nConfidence: {non_defective_prob:.2%}")
+                st.success(f"✅ Track is **Not Defective** \n\n Confidence: {non_defective_prob:.2%}")
