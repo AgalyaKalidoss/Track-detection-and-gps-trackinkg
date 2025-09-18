@@ -4,7 +4,6 @@ import pandas as pd
 import tensorflow as tf
 from PIL import Image
 
-# Optional: comment out folium if not installed
 import folium
 from streamlit_folium import st_folium
 
@@ -49,17 +48,17 @@ with tab1:
         interpreter.invoke()
         output = interpreter.get_tensor(output_details[0]['index'])[0]
 
-        # Determine model type automatically
-        if len(output) == 2:
-            defective_score = float(output[0])
-            non_defective_score = float(output[1])
-            if defective_score > non_defective_score:
-                st.error(f"🚨 Defective Track Detected\nConfidence: {defective_score:.2%}")
+        # Determine model output type
+        if len(output) == 2:  # softmax output
+            pred_class = np.argmax(output)
+            if pred_class == 0:
+                st.error(f"🚨 Defective Track Detected\nConfidence: {output[0]:.2%}")
             else:
-                st.success(f"✅ Track is Properly Aligned\nConfidence: {non_defective_score:.2%}")
-        else:
+                st.success(f"✅ Track is Properly Aligned\nConfidence: {output[1]:.2%}")
+        else:  # sigmoid output
             prob = float(output[0])
-            if prob < 0.5:
+            threshold = 0.462  # adjust based on model
+            if prob < threshold:
                 st.error(f"🚨 Defective Track Detected\nConfidence: {prob:.2%}")
             else:
                 st.success(f"✅ Track is Properly Aligned\nConfidence: {prob:.2%}")
@@ -81,12 +80,10 @@ with tab2:
     for t, loc in zip(train_names, locations):
         km_marker = np.random.randint(0,500)   # simulated position in km
         speed = np.random.randint(40,120)      # simulated speed km/h
-        # random lat/lon in Tamil Nadu range
-        lat = np.random.uniform(8.0, 13.0)
-        lon = np.random.uniform(76.0, 80.0)
-        data.append([t, loc, km_marker, speed, lat, lon])  # 6 elements
+        lat = np.random.uniform(8.0, 13.0)     # simulated latitude
+        lon = np.random.uniform(76.0, 80.0)    # simulated longitude
+        data.append([t, loc, km_marker, speed, lat, lon])
 
-    # Columns must match exactly
     df = pd.DataFrame(data, columns=["Train","Location","KM_Marker","Speed","Latitude","Longitude"])
 
     st.subheader("🚉 Current Train Status")
