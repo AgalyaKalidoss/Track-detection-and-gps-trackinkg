@@ -44,17 +44,18 @@ with tab1:
         interpreter.invoke()
         prediction = interpreter.get_tensor(output_details[0]['index'])[0][0]
 
-        # Handle quantized output if needed
+        # Handle quantized output properly
         if output_details[0]['dtype'] != np.float32:
             scale, zero_point = output_details[0]['quantization']
             prediction = scale * (prediction - zero_point)
 
-        # Threshold <50% = Defective
+        # Threshold: <0.5 = defective
         threshold = 0.5
         if prediction < threshold:
             st.error("⚠️ Defective Track Detected")
         else:
             st.success("✅ Track is Properly Aligned")
+
         st.write(f"🔍 Prediction Score: {prediction:.3f}")
 
 # ============================
@@ -72,15 +73,15 @@ with tab2:
 
     data = []
     for t, loc in zip(train_names, locations):
-        km_marker = random.randint(0, 500)  # Track position in KM
-        speed = random.randint(40, 120)     # Speed in km/h
+        km_marker = random.randint(0, 500)
+        speed = random.randint(40, 120)
         data.append([t, loc, km_marker, speed])
 
     df = pd.DataFrame(data, columns=["Train", "Location", "KM_Marker", "Speed"])
 
-    # Detect collision risks
+    # Collision detection
     alerts = []
-    safe_distance = 30  # Minimum safe distance in KM
+    safe_distance = 30  # KM
     for i in range(len(df)):
         for j in range(i+1, len(df)):
             if abs(df.loc[i,"KM_Marker"] - df.loc[j,"KM_Marker"]) < safe_distance:
