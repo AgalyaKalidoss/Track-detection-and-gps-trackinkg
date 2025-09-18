@@ -1,10 +1,10 @@
 import streamlit as st
 import tensorflow as tf
 import numpy as np
-from PIL import Image
 import pandas as pd
 import matplotlib.pyplot as plt
 import random
+from PIL import Image
 import os
 
 # ----------------------------
@@ -13,17 +13,13 @@ import os
 MODEL_PATH = "railway_model_final.tflite"
 
 # ----------------------------
-# Check if TFLite exists
-# ----------------------------
-if not os.path.exists(MODEL_PATH):
-    st.error(f"❌ TFLite model not found at path: {MODEL_PATH}")
-    st.stop()
-
-# ----------------------------
-# Load TFLite model
+# Load TFLite Model
 # ----------------------------
 @st.cache_resource
 def load_model():
+    if not os.path.exists(MODEL_PATH):
+        st.error(f"❌ Model file not found: {MODEL_PATH}")
+        st.stop()
     interpreter = tf.lite.Interpreter(model_path=MODEL_PATH)
     interpreter.allocate_tensors()
     return interpreter
@@ -33,52 +29,50 @@ input_details = interpreter.get_input_details()
 output_details = interpreter.get_output_details()
 
 # ----------------------------
-# App UI
+# Streamlit Layout
 # ----------------------------
-st.title("🚉 Railway Track Safety Monitoring System")
+st.title("🚄 Railway Track Safety Monitoring System")
 
-tab1, tab2 = st.tabs(["🧠 Track Fault Detection", "📍 GPS & Collision Alerts"])
+tab1, tab2 = st.tabs(["🧠 Track Fault Detection", "📍 GPS & Collision Monitoring"])
 
 # ============================
 # TAB 1 - Track Fault Detection
 # ============================
 with tab1:
     st.header("Detect Defective Railway Tracks")
-    uploaded_file = st.file_uploader("Upload a railway track image", type=["jpg", "jpeg", "png"])
+    uploaded_file = st.file_uploader("Upload track image", type=["jpg", "jpeg", "png"])
 
-    if uploaded_file:
-        img = Image.open(uploaded_file).convert('RGB')
-        st.image(img, caption="Uploaded Track", width='stretch')
+    if uploaded_file is not None:
+        img = Image.open(uploaded_file).convert("RGB").resize((224, 224))
+        st.image(img, caption="Uploaded Track Image", width=400)
 
         # Preprocess
-        img_resized = img.resize((224, 224))
-        img_array = np.expand_dims(np.array(img_resized)/255.0, axis=0).astype(np.float32)
+        img_array = np.expand_dims(np.array(img)/255.0, axis=0).astype(np.float32)
 
-        # TFLite inference
+        # Inference
         interpreter.set_tensor(input_details[0]['index'], img_array)
         interpreter.invoke()
         prediction = interpreter.get_tensor(output_details[0]['index'])[0][0]
 
-        # Show raw score
-        st.write("🔍 Raw prediction score:", float(prediction))
+        st.write("🔍 Model raw output:", float(prediction))
 
-        # Threshold (<0.5 → defective)
-        if prediction < 0.5:
+        # Threshold (adjust empirically)
+        threshold = 0.5
+        if prediction < threshold:
             st.error("⚠️ Defective Track Detected")
         else:
             st.success("✅ Track is Properly Aligned")
 
 # ============================
-# TAB 2 - GPS & Collision Alerts
+# TAB 2 - GPS & Collision Monitoring
 # ============================
 with tab2:
     st.header("Train GPS Tracking & Collision Alerts")
 
     # Simulated train data
-    train_names = [f"Train_{i}" for i in range(1, 11)]
+    train_names = [f"Train_{i}" for i in range(1, 6)]
     locations = [
-        "Chennai", "Madurai", "Coimbatore", "Trichy", "Salem",
-        "Tirunelveli", "Erode", "Thanjavur", "Vellore", "Dindigul"
+        "Chennai", "Madurai", "Coimbatore", "Trichy", "Salem"
     ]
 
     data = []
@@ -94,8 +88,8 @@ with tab2:
     safe_distance = 30
     for i in range(len(df)):
         for j in range(i+1, len(df)):
-            if abs(df.loc[i,"KM_Marker"] - df.loc[j,"KM_Marker"]) < safe_distance:
-                if df.loc[i,"Speed"] > df.loc[j,"Speed"]:
+            if abs(df.loc[i, "KM_Marker"] - df.loc[j, "KM_Marker"]) < safe_distance:
+                if df.loc[i, "Speed"] > df.loc[j, "Speed"]:
                     alerts.append(f"⚠️ {df.loc[i,'Train']} should SLOW DOWN to avoid collision with {df.loc[j,'Train']}")
                 else:
                     alerts.append(f"⚠️ {df.loc[j,'Train']} should SLOW DOWN to avoid collision with {df.loc[i,'Train']}")
@@ -108,7 +102,6 @@ with tab2:
         else:
             scheduling.append(f"✅ {row['Train']} is on time. Schedule next train 5 min later.")
 
-    # Display data
     st.subheader("🚉 Current Train Status")
     st.dataframe(df)
 
@@ -123,7 +116,7 @@ with tab2:
     for s in scheduling:
         st.info(s)
 
-    # Graph
+    # Plot train positions
     st.subheader("📍 Train Positions")
     fig, ax = plt.subplots()
     ax.scatter(df["KM_Marker"], df["Speed"], c='blue')
