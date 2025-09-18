@@ -1,5 +1,7 @@
 streamlit
 tensorflow
 numpy
-pillow
-geocoder
+Pillow
+folium
+streamlit-folium
+pandas
