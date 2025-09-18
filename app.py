@@ -1,55 +1,125 @@
 import streamlit as st
 import tensorflow as tf
 import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import random
 from PIL import Image
-import folium
-from streamlit_folium import st_folium
 
-# Set correct model path
-MODEL_PATH = "railway_model_final.tflite"
-
+# ----------------------------
+# Load TFLite Track Detection Model
+# ----------------------------
 @st.cache_resource
-def load_model():
-    interpreter = tf.lite.Interpreter(model_path=MODEL_PATH)
+def load_tflite_model(tflite_path="railway_model_final.tflite"):
+    interpreter = tf.lite.Interpreter(model_path=tflite_path)
     interpreter.allocate_tensors()
-    return interpreter
+    input_details = interpreter.get_input_details()
+    output_details = interpreter.get_output_details()
+    return interpreter, input_details, output_details
 
-interpreter = load_model()
-input_details = interpreter.get_input_details()
-output_details = interpreter.get_output_details()
+interpreter, input_details, output_details = load_tflite_model()
 
-st.title("🚉 Railway Track Defect Detection")
-st.write("Upload a railway track image and provide GPS location to detect defects.")
+# ----------------------------
+# UI Layout
+# ----------------------------
+st.title("🚄 Railway Safety Monitoring System")
+tab1, tab2 = st.tabs(["🧠 Track Fault Detection", "📍 GPS & Collision Prevention"])
 
-# File uploader
-uploaded_file = st.file_uploader("Choose an image...", type=["jpg", "jpeg", "png"])
+# ============================
+# TAB 1 - Track Fault Detection
+# ============================
+with tab1:
+    st.header("Detect Defective Railway Tracks")
+    uploaded_file = st.file_uploader("Upload track image", type=["jpg", "jpeg", "png"])
 
-# GPS input
-latitude = st.number_input("Latitude", value=0.0, format="%.6f")
-longitude = st.number_input("Longitude", value=0.0, format="%.6f")
+    if uploaded_file:
+        img = Image.open(uploaded_file).convert('RGB').resize((224, 224))
+        st.image(img, caption="Uploaded Track", width='stretch')
 
-if uploaded_file:
-    img = Image.open(uploaded_file).convert("RGB").resize((224, 224))
-    st.image(img, caption="Uploaded Image", width=400)
+        # Preprocess
+        img_array = np.expand_dims(np.array(img)/255.0, axis=0).astype(np.float32)
 
-    # Preprocess
-    img_array = np.expand_dims(np.array(img) / 255.0, axis=0).astype(np.float32)
+        # Inference
+        interpreter.set_tensor(input_details[0]['index'], img_array)
+        interpreter.invoke()
+        prediction = interpreter.get_tensor(output_details[0]['index'])[0][0]
 
-    # Run inference
-    interpreter.set_tensor(input_details[0]['index'], img_array)
-    interpreter.invoke()
-    prediction = interpreter.get_tensor(output_details[0]['index'])[0][0]
+        # Handle quantized output properly
+        if output_details[0]['dtype'] != np.float32:
+            scale, zero_point = output_details[0]['quantization']
+            prediction = scale * (prediction - zero_point)
 
-    st.write("🔍 Raw score:", float(prediction))
+        # Threshold: <0.5 = defective
+        threshold = 0.5
+        if prediction < threshold:
+            st.error("⚠️ Defective Track Detected")
+        else:
+            st.success("✅ Track is Properly Aligned")
 
-    # Threshold: 50%
-    if prediction < 0.5:
-        st.error("⚠️ Defective Track Detected")
+        st.write(f"🔍 Prediction Score: {prediction:.3f}")
+
+# ============================
+# TAB 2 - Collision Prevention
+# ============================
+with tab2:
+    st.header("Train GPS Tracking & Collision Prevention")
+
+    # Simulated train data
+    train_names = [f"Train_{i}" for i in range(1, 11)]
+    locations = [
+        "Chennai", "Madurai", "Coimbatore", "Trichy", "Salem",
+        "Tirunelveli", "Erode", "Thanjavur", "Vellore", "Dindigul"
+    ]
+
+    data = []
+    for t, loc in zip(train_names, locations):
+        km_marker = random.randint(0, 500)
+        speed = random.randint(40, 120)
+        data.append([t, loc, km_marker, speed])
+
+    df = pd.DataFrame(data, columns=["Train", "Location", "KM_Marker", "Speed"])
+
+    # Collision detection
+    alerts = []
+    safe_distance = 30  # KM
+    for i in range(len(df)):
+        for j in range(i+1, len(df)):
+            if abs(df.loc[i,"KM_Marker"] - df.loc[j,"KM_Marker"]) < safe_distance:
+                if df.loc[i,"Speed"] > df.loc[j,"Speed"]:
+                    alerts.append(f"⚠️ {df.loc[i,'Train']} should SLOW DOWN to avoid collision with {df.loc[j,'Train']}")
+                else:
+                    alerts.append(f"⚠️ {df.loc[j,'Train']} should SLOW DOWN to avoid collision with {df.loc[i,'Train']}")
+
+    # Scheduling suggestions
+    scheduling = []
+    for idx, row in df.iterrows():
+        if row['Speed'] < 60:
+            scheduling.append(f"🕒 {row['Train']} is slow. Schedule next train 15 min later.")
+        else:
+            scheduling.append(f"✅ {row['Train']} is on time. Schedule next train 5 min later.")
+
+    # Display tables
+    st.subheader("🚉 Current Train Status")
+    st.dataframe(df)
+
+    st.subheader("📢 Collision Alerts")
+    if alerts:
+        for a in alerts:
+            st.error(a)
     else:
-        st.success("✅ Track is Properly Aligned")
+        st.success("✅ No collision risks detected")
 
-    # Show GPS location on map
-    st.subheader("📍 Track Location")
-    m = folium.Map(location=[latitude, longitude], zoom_start=16)
-    folium.Marker([latitude, longitude], tooltip="Track Location").add_to(m)
-    st_folium(m, width=700)
+    st.subheader("📋 Scheduling Suggestions")
+    for s in scheduling:
+        st.info(s)
+
+    # Graph
+    st.subheader("📍 Train Positions")
+    fig, ax = plt.subplots(figsize=(8,4))
+    ax.scatter(df["KM_Marker"], df["Speed"], c='blue')
+    for i, row in df.iterrows():
+        ax.text(row["KM_Marker"], row["Speed"]+2, row["Train"], fontsize=8)
+    ax.set_xlabel("Track Position (KM)")
+    ax.set_ylabel("Speed (km/h)")
+    ax.set_title("Train Speed vs Position")
+    st.pyplot(fig)
