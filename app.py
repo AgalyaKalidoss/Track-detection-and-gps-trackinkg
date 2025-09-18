@@ -8,11 +8,10 @@ import random
 import os
 
 # ----------------------------
-# Load TFLite Model
+# Load TFLite Track Detection Model
 # ----------------------------
 @st.cache_resource
-def load_tflite_model():
-    tflite_path = "railway_model_final.tflite"
+def load_tflite_model(tflite_path="railway_model_final.tflite"):
     if not os.path.exists(tflite_path):
         st.error(f"❌ TFLite model not found at {tflite_path}")
         return None
@@ -21,15 +20,14 @@ def load_tflite_model():
     return interpreter
 
 interpreter = load_tflite_model()
-if interpreter is None:
-    st.stop()
-
-input_details = interpreter.get_input_details()
-output_details = interpreter.get_output_details()
+if interpreter is not None:
+    input_details = interpreter.get_input_details()
+    output_details = interpreter.get_output_details()
 
 # ----------------------------
-# UI Layout
+# Streamlit UI Layout
 # ----------------------------
+st.set_page_config(page_title="🚄 Railway Safety Monitoring", layout="wide")
 st.title("🚄 Railway Safety Monitoring System")
 tab1, tab2 = st.tabs(["🧠 Track Fault Detection", "📍 GPS & Collision Prevention"])
 
@@ -38,34 +36,44 @@ tab1, tab2 = st.tabs(["🧠 Track Fault Detection", "📍 GPS & Collision Preven
 # ============================
 with tab1:
     st.header("Detect Defective Railway Tracks")
-    uploaded_file = st.file_uploader("Upload a track image", type=["jpg", "jpeg", "png"])
-    
-    if uploaded_file:
-        img = Image.open(uploaded_file).convert('RGB').resize((224,224))
-        st.image(img, caption="Uploaded Track", use_container_width=True)
+    uploaded_file = st.file_uploader("Upload track image", type=["jpg", "jpeg", "png"])
 
+    if uploaded_file and interpreter is not None:
+        img = Image.open(uploaded_file).convert('RGB').resize((224, 224))
+        st.image(img, caption="Uploaded Track Image", use_container_width=True)
+
+        # Preprocess
         img_array = np.expand_dims(np.array(img)/255.0, axis=0).astype(np.float32)
 
-        # TFLite inference
+        # Inference
         interpreter.set_tensor(input_details[0]['index'], img_array)
         interpreter.invoke()
-        prediction = float(interpreter.get_tensor(output_details[0]['index'])[0][0])
+        prediction_raw = interpreter.get_tensor(output_details[0]['index'])[0][0]
 
-        st.write("🔍 Raw output:", round(prediction, 3))
-        threshold = 0.5  # <50% = defective
+        # Dequantize if needed
+        scale, zero_point = output_details[0]['quantization']
+        if scale != 0:
+            prediction = scale * (prediction_raw - zero_point)
+        else:
+            prediction = float(prediction_raw)
+
+        st.write("🔍 Model output:", round(prediction, 3))
+
+        # Threshold
+        threshold = 0.5
         if prediction < threshold:
             st.error("⚠️ Defective Track Detected")
         else:
             st.success("✅ Track is Properly Aligned")
 
 # ============================
-# TAB 2 - GPS & Collision
+# TAB 2 - GPS & Collision Prevention
 # ============================
 with tab2:
     st.header("Train GPS Tracking & Collision Prevention")
 
-    # Simulate train data
-    train_names = [f"Train_{i}" for i in range(1,11)]
+    # Simulated train data
+    train_names = [f"Train_{i}" for i in range(1, 11)]
     locations = [
         "Chennai", "Madurai", "Coimbatore", "Trichy", "Salem",
         "Tirunelveli", "Erode", "Thanjavur", "Vellore", "Dindigul"
@@ -73,11 +81,11 @@ with tab2:
 
     data = []
     for t, loc in zip(train_names, locations):
-        km_marker = random.randint(0, 500)  # position on track in KM
-        speed = random.randint(40, 120)     # km/h
+        km_marker = random.randint(0, 500)   # Simulate track position in km
+        speed = random.randint(40, 120)      # Simulate speed in km/h
         data.append([t, loc, km_marker, speed])
 
-    df = pd.DataFrame(data, columns=["Train","Location","KM_Marker","Speed"])
+    df = pd.DataFrame(data, columns=["Train", "Location", "KM_Marker", "Speed"])
 
     # Collision alerts
     alerts = []
@@ -85,10 +93,9 @@ with tab2:
     for i in range(len(df)):
         for j in range(i+1, len(df)):
             if abs(df.loc[i,"KM_Marker"] - df.loc[j,"KM_Marker"]) < safe_distance:
-                if df.loc[i,"Speed"] > df.loc[j,"Speed"]:
-                    alerts.append(f"⚠️ {df.loc[i,'Train']} should SLOW DOWN to avoid collision with {df.loc[j,'Train']}")
-                else:
-                    alerts.append(f"⚠️ {df.loc[j,'Train']} should SLOW DOWN to avoid collision with {df.loc[i,'Train']}")
+                faster = df.loc[i] if df.loc[i,"Speed"] > df.loc[j,"Speed"] else df.loc[j]
+                slower = df.loc[j] if df.loc[i,"Speed"] > df.loc[j,"Speed"] else df.loc[i]
+                alerts.append(f"⚠️ {faster['Train']} should SLOW DOWN to avoid collision with {slower['Train']}")
 
     # Scheduling suggestions
     scheduling = []
@@ -112,8 +119,8 @@ with tab2:
     for s in scheduling:
         st.info(s)
 
-    # Graph: train positions vs speed
-    st.subheader("📍 Train Positions")
+    # Graph visualization
+    st.subheader("📍 Train Positions vs Speed")
     fig, ax = plt.subplots()
     ax.scatter(df["KM_Marker"], df["Speed"], c='blue')
     for i, row in df.iterrows():
