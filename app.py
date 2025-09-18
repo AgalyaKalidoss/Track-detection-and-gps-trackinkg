@@ -41,27 +41,23 @@ with tab1:
 
         # Preprocess
         img = image.resize((224,224))
-        img_array = np.expand_dims(np.array(img)/255.0, axis=0).astype(np.float32)
+        img_array = np.expand_dims(np.array(img), axis=0).astype(np.float32)
+        # Apply MobileNetV2 preprocessing
+        from tensorflow.keras.applications.mobilenet_v2 import preprocess_input
+        img_array = preprocess_input(img_array)
 
         # Inference
         interpreter.set_tensor(input_details[0]['index'], img_array)
         interpreter.invoke()
         output = interpreter.get_tensor(output_details[0]['index'])[0]
 
-        # Handle output
-        if len(output) == 2:  # softmax
-            pred_class = np.argmax(output)
-            if pred_class == 0:
-                st.error(f"🚨 Defective Track Detected\nConfidence: {output[0]:.2%}")
-            else:
-                st.success(f"✅ Track is Properly Aligned\nConfidence: {output[1]:.2%}")
-        else:  # sigmoid
-            prob = float(output[0])
-            threshold = 0.462  # adjust empirically
-            if prob < threshold:
-                st.error(f"🚨 Defective Track Detected\nConfidence: {prob:.2%}")
-            else:
-                st.success(f"✅ Track is Properly Aligned\nConfidence: {prob:.2%}")
+        # Sigmoid output
+        prob = float(output[0])
+        threshold = 0.462  # adjust if needed
+        if prob < threshold:
+            st.error(f"🚨 Defective Track Detected\nConfidence: {prob:.2%}")
+        else:
+            st.success(f"✅ Track is Properly Aligned\nConfidence: {prob:.2%}")
 
 # =========================
 # Tab 2: GPS / Collision Prevention
