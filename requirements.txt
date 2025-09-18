@@ -1,6 +1,5 @@
 streamlit
 tensorflow
 numpy
-pandas
-matplotlib
-Pillow
+pillow
+geocoder
