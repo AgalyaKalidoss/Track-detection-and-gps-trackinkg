@@ -10,8 +10,7 @@ from PIL import Image
 # Load TFLite Model
 # ----------------------------
 @st.cache_resource
-def load_tflite_model():
-    tflite_path = "railway_model_final.tflite"
+def load_tflite_model(tflite_path="railway_model_final.tflite"):
     interpreter = tf.lite.Interpreter(model_path=tflite_path)
     interpreter.allocate_tensors()
     return interpreter
@@ -35,27 +34,25 @@ with tab1:
     uploaded_file = st.file_uploader("Upload track image", type=["jpg", "jpeg", "png"])
 
     if uploaded_file:
-        img = Image.open(uploaded_file).convert('RGB')
+        img = Image.open(uploaded_file).convert('RGB').resize((224, 224))
         st.image(img, caption="Uploaded Track", width='stretch')
 
-        img_resized = img.resize((224, 224))
-        img_array = np.expand_dims(np.array(img_resized)/255.0, axis=0).astype(np.float32)
+        # Preprocess
+        img_array = np.expand_dims(np.array(img)/255.0, axis=0).astype(np.float32)
 
         # Inference
         interpreter.set_tensor(input_details[0]['index'], img_array)
         interpreter.invoke()
-        prediction = float(interpreter.get_tensor(output_details[0]['index'])[0][0])
+        prediction = interpreter.get_tensor(output_details[0]['index'])[0][0]
 
-        # Threshold at 0.5
+        # Threshold <50% = Defective
         if prediction < 0.5:
             st.error("⚠️ Defective Track Detected")
         else:
             st.success("✅ Track is Properly Aligned")
 
-        st.write("🔍 Raw model output:", round(prediction, 4))
-
 # ============================
-# TAB 2 - GPS & Collision Prevention
+# TAB 2 - Collision Prevention
 # ============================
 with tab2:
     st.header("Train GPS Tracking & Collision Prevention")
@@ -69,15 +66,15 @@ with tab2:
 
     data = []
     for t, loc in zip(train_names, locations):
-        km_marker = random.randint(0, 500)  # Track position in KM
-        speed = random.randint(40, 120)     # Speed in km/h
+        km_marker = random.randint(0, 500)
+        speed = random.randint(40, 120)
         data.append([t, loc, km_marker, speed])
 
     df = pd.DataFrame(data, columns=["Train", "Location", "KM_Marker", "Speed"])
 
     # Detect collision risks
     alerts = []
-    safe_distance = 30  # KM distance considered safe
+    safe_distance = 30
     for i in range(len(df)):
         for j in range(i+1, len(df)):
             if abs(df.loc[i,"KM_Marker"] - df.loc[j,"KM_Marker"]) < safe_distance:
@@ -109,8 +106,8 @@ with tab2:
         st.info(s)
 
     # Graph
-    st.subheader("📍 Train Positions vs Speed")
-    fig, ax = plt.subplots()
+    st.subheader("📍 Train Positions")
+    fig, ax = plt.subplots(figsize=(10, 5))
     ax.scatter(df["KM_Marker"], df["Speed"], c='blue')
     for i, row in df.iterrows():
         ax.text(row["KM_Marker"], row["Speed"]+2, row["Train"], fontsize=8)
